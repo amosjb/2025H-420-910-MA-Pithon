@@ -6,7 +6,7 @@ from pithon.syntax import (
     PiFunctionDef, PiFunctionCall, PiFor, PiBreak, PiContinue, PiIn, PiReturn, PiClassDef, PiAttribute, PiAttributeAssignment
 )
 from pithon.evaluator.envvalue import (
-EnvValue, VFunctionClosure, VList, VNone, VTuple, VNumber, VBool, VString, VClassDef, VObject, VMethodClosure
+    EnvValue, VFunctionClosure, VList, VNone, VTuple, VNumber, VBool, VString, VClassDef, VObject, VMethodClosure
 )
 
 def initial_env() -> EnvFrame:
@@ -244,12 +244,30 @@ def _evaluate_function_call(node: PiFunctionCall, env: EnvFrame) -> EnvValue:
     """Évalue un appel de fonction (primitive ou définie par l'utilisateur)."""
     func_val = evaluate_stmt(node.function, env)
     args = [evaluate_stmt(arg, env) for arg in node.args]
+
+    # Instanciation de classe
+    if isinstance(func_val, VClassDef):
+        instance = VObject(class_def=func_val, attributes={})
+        # Chercher et appeler la méthode __init__ si elle existe
+        if '__init__' in func_val.methods:
+            init_method = func_val.methods['__init__']
+            init_closure = VMethodClosure(function=init_method, instance=instance)
+            _execute_method_call(init_closure, args, env)
+        return instance
+
+    # Appel de méthode
+    if isinstance(func_val, VMethodClosure):
+        return _execute_method_call(func_val, args, env)
+    
     # Fonction primitive
     if callable(func_val):
         return func_val(args)
     # Fonction utilisateur
     if not isinstance(func_val, VFunctionClosure):
         raise TypeError("Tentative d'appel d'un objet non-fonction.")
+    return _execute_function_call(func_val, args, env)
+
+def _execute_function_call(func_val: VFunctionClosure, args: list[EnvValue], env: EnvFrame) -> EnvValue:
     funcdef = func_val.funcdef
     closure_env = func_val.closure_env
     call_env = EnvFrame(parent=closure_env)
@@ -269,6 +287,42 @@ def _evaluate_function_call(node: PiFunctionCall, env: EnvFrame) -> EnvValue:
             result = evaluate_stmt(stmt, call_env)
     except ReturnException as ret:
         return ret.value
+    return result
+
+def _execute_method_call(method_closure: VMethodClosure, args: list[EnvValue], env: EnvFrame) -> EnvValue:
+    """Exécute un appel de méthode."""
+    funcdef = method_closure.function.funcdef
+    closure_env = method_closure.function.closure_env
+    call_env = EnvFrame(parent=closure_env)
+    
+    # 'self' est le premier argument
+    if not funcdef.arg_names or funcdef.arg_names[0] != 'self':
+        raise TypeError("La première argument d'une méthode doit être 'self'.")
+    
+    call_env.insert('self', method_closure.instance)
+    
+    # Les autres arguments
+    arg_names = funcdef.arg_names[1:]
+    for i, arg_name in enumerate(arg_names):
+        if i < len(args):
+            call_env.insert(arg_name, args[i])
+        else:
+            raise TypeError(f"Argument manquant '{arg_name}' pour la méthode.")
+
+    if len(args) > len(arg_names):
+        raise TypeError("Trop d'arguments pour la méthode.")
+
+    result = VNone(value=None)
+    try:
+        for stmt in funcdef.body:
+            result = evaluate_stmt(stmt, call_env)
+    except ReturnException as ret:
+        return ret.value
+    
+    # Pour __init__, on retourne None implicitement
+    if funcdef.name == '__init__':
+        return VNone(value=None)
+        
     return result
 
 class ReturnException(Exception):
