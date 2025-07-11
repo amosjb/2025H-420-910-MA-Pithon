@@ -25,118 +25,123 @@ def insert(env: EnvFrame, name: str, value: EnvValue) -> None:
 
 def evaluate(node: PiProgram, env: EnvFrame) -> EnvValue:
     """Évalue un programme ou une liste d'instructions."""
-    if isinstance(node, list):
-        last_value = VNone(value=None)
-        for stmt in node:
-            last_value = evaluate_stmt(stmt, env)
-        return last_value
-    elif isinstance(node, PiStatement):
-        return evaluate_stmt(node, env)
-    else:
-        raise TypeError(f"Type de nœud non supporté : {type(node)}")
+    try:
+        if isinstance(node, list):
+            last_value = VNone(value=None)
+            for stmt in node:
+                last_value = evaluate_stmt(stmt, env)
+            return last_value
+        elif isinstance(node, PiStatement):
+            return evaluate_stmt(node, env)
+        else:
+            raise TypeError(f"Type de nœud non supporté : {type(node)}")
+    except (TypeError, ZeroDivisionError, ValueError) as e:
+        raise RuntimeError(str(e))
 
 def evaluate_stmt(node: PiStatement, env: EnvFrame) -> EnvValue:
     """Évalue une instruction ou expression Pithon."""
-
-    if isinstance(node, PiNumber):
-        return VNumber(node.value)
-
-    elif isinstance(node, PiBool):
-        return VBool(node.value)
-
-    elif isinstance(node, PiNone):
-        return VNone(node.value)
-
-    elif isinstance(node, PiString):
-        return VString(node.value)
-
-    elif isinstance(node, PiList):
-        elements = [evaluate_stmt(e, env) for e in node.elements]
-        return VList(elements)
-
-    elif isinstance(node, PiTuple):
-        elements = tuple(evaluate_stmt(e, env) for e in node.elements)
-        return VTuple(elements)
-
-    elif isinstance(node, PiVariable):
-        return lookup(env, node.name)
-
-    elif isinstance(node, PiBinaryOperation):
-        # Traite l'opération binaire comme un appel de fonction
-        fct_call = PiFunctionCall(
-            function=PiVariable(name=node.operator),
-            args=[node.left, node.right]
-        )
-        return evaluate_stmt(fct_call, env)
-
-    elif isinstance(node, PiAssignment):
-        value = evaluate_stmt(node.value, env)
-        insert(env, node.name, value)
-        return value
-
-    elif isinstance(node, PiIfThenElse):
-        cond = evaluate_stmt(node.condition, env)
-        cond = check_type(cond, VBool)
-        branch = node.then_branch if cond.value else node.else_branch
-        last_value = evaluate(branch, env)
-        return last_value
-
-    elif isinstance(node, PiNot):
-        operand = evaluate_stmt(node.operand, env)
-        # Vérifie le type pour l'opérateur 'not'
-        _check_valid_piandor_type(operand)
-        return VBool(not operand.value) # type: ignore
-
-    elif isinstance(node, PiAnd):
-        left = evaluate_stmt(node.left, env)
-        _check_valid_piandor_type(left)
-        if not left.value: # type: ignore
-            return left
-        right = evaluate_stmt(node.right, env)
-        _check_valid_piandor_type(right)
-        return right
-
-    elif isinstance(node, PiOr):
-        left = evaluate_stmt(node.left, env)
-        _check_valid_piandor_type(left)
-        if left.value: # type: ignore
-            return left
-        right = evaluate_stmt(node.right, env)
-        _check_valid_piandor_type(right)
-        return right
-
-    elif isinstance(node, PiWhile):
-        return _evaluate_while(node, env)
-
-    elif isinstance(node, PiFunctionDef):
-        closure = VFunctionClosure(node, env)
-        insert(env, node.name, closure)
-        return VNone(value=None)
-
-    elif isinstance(node, PiReturn):
-        value = evaluate_stmt(node.value, env)
-        raise ReturnException(value)
-
-    elif isinstance(node, PiFunctionCall):
-        return _evaluate_function_call(node, env)
-
-    elif isinstance(node, PiFor):
-        return _evaluate_for(node, env)
-
-    elif isinstance(node, PiBreak):
-        raise BreakException()
-
-    elif isinstance(node, PiContinue):
-        raise ContinueException()
-
-    elif isinstance(node, PiIn):
-        return _evaluate_in(node, env)
-
-    elif isinstance(node, PiSubscript):
-        return _evaluate_subscript(node, env)
-
-    else:
-        raise TypeError(f"Type de nœud non supporté : {type(node)}")
+    try:
+        if isinstance(node, PiNumber):
+            return VNumber(node.value)
+    
+        elif isinstance(node, PiBool):
+            return VBool(node.value)
+    
+        elif isinstance(node, PiNone):
+            return VNone(node.value)
+    
+        elif isinstance(node, PiString):
+            return VString(node.value)
+    
+        elif isinstance(node, PiList):
+            elements = [evaluate_stmt(e, env) for e in node.elements]
+            return VList(elements)
+    
+        elif isinstance(node, PiTuple):
+            elements = tuple(evaluate_stmt(e, env) for e in node.elements)
+            return VTuple(elements)
+    
+        elif isinstance(node, PiVariable):
+            return lookup(env, node.name)
+    
+        elif isinstance(node, PiBinaryOperation):
+            # Traite l'opération binaire comme un appel de fonction
+            fct_call = PiFunctionCall(
+                function=PiVariable(name=node.operator),
+                args=[node.left, node.right]
+            )
+            return evaluate_stmt(fct_call, env)
+    
+        elif isinstance(node, PiAssignment):
+            value = evaluate_stmt(node.value, env)
+            insert(env, node.name, value)
+            return value
+    
+        elif isinstance(node, PiIfThenElse):
+            cond = evaluate_stmt(node.condition, env)
+            cond = check_type(cond, VBool)
+            branch = node.then_branch if cond.value else node.else_branch
+            last_value = evaluate(branch, env)
+            return last_value
+    
+        elif isinstance(node, PiNot):
+            operand = evaluate_stmt(node.operand, env)
+            # Vérifie le type pour l'opérateur 'not'
+            _check_valid_piandor_type(operand)
+            return VBool(not operand.value) # type: ignore
+    
+        elif isinstance(node, PiAnd):
+            left = evaluate_stmt(node.left, env)
+            _check_valid_piandor_type(left)
+            if not left.value: # type: ignore
+                return left
+            right = evaluate_stmt(node.right, env)
+            _check_valid_piandor_type(right)
+            return right
+    
+        elif isinstance(node, PiOr):
+            left = evaluate_stmt(node.left, env)
+            _check_valid_piandor_type(left)
+            if left.value: # type: ignore
+                return left
+            right = evaluate_stmt(node.right, env)
+            _check_valid_piandor_type(right)
+            return right
+    
+        elif isinstance(node, PiWhile):
+            return _evaluate_while(node, env)
+    
+        elif isinstance(node, PiFunctionDef):
+            closure = VFunctionClosure(node, env)
+            insert(env, node.name, closure)
+            return VNone(value=None)
+    
+        elif isinstance(node, PiReturn):
+            value = evaluate_stmt(node.value, env)
+            raise ReturnException(value)
+    
+        elif isinstance(node, PiFunctionCall):
+            return _evaluate_function_call(node, env)
+    
+        elif isinstance(node, PiFor):
+            return _evaluate_for(node, env)
+    
+        elif isinstance(node, PiBreak):
+            raise BreakException()
+    
+        elif isinstance(node, PiContinue):
+            raise ContinueException()
+    
+        elif isinstance(node, PiIn):
+            return _evaluate_in(node, env)
+    
+        elif isinstance(node, PiSubscript):
+            return _evaluate_subscript(node, env)
+    
+        else:
+            raise TypeError(f"Type de nœud non supporté : {type(node)}")
+    except (TypeError, ZeroDivisionError, ValueError) as e:
+        raise RuntimeError(str(e))
 
 def _check_valid_piandor_type(obj):
     """Vérifie que le type est valide pour 'and'/'or'."""
