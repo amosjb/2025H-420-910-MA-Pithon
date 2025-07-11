@@ -137,6 +137,34 @@ def evaluate_stmt(node: PiStatement, env: EnvFrame) -> EnvValue:
     
         elif isinstance(node, PiSubscript):
             return _evaluate_subscript(node, env)
+
+        elif isinstance(node, PiClassDef):
+            methods = {
+                method.name: VFunctionClosure(method, env)
+                for method in node.methods
+            }
+            class_def = VClassDef(name=node.name, methods=methods)
+            env.insert(node.name, class_def)
+            return VNone(value=None)
+
+        elif isinstance(node, PiAttribute):
+            obj = evaluate_stmt(node.object, env)
+            if not isinstance(obj, VObject):
+                raise TypeError("Seuls les objets peuvent avoir des attributs.")
+            if node.attr in obj.attributes:
+                return obj.attributes[node.attr]
+            if node.attr in obj.class_def.methods:
+                method = obj.class_def.methods[node.attr]
+                return VMethodClosure(function=method, instance=obj)
+            raise AttributeError(f"L'objet n'a pas d'attribut '{node.attr}'")
+
+        elif isinstance(node, PiAttributeAssignment):
+            obj = evaluate_stmt(node.object, env)
+            if not isinstance(obj, VObject):
+                raise TypeError("Seuls les objets peuvent avoir des attributs.")
+            value = evaluate_stmt(node.value, env)
+            obj.attributes[node.attr] = value
+            return value
     
         else:
             raise TypeError(f"Type de nœud non supporté : {type(node)}")
